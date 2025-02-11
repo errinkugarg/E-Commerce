@@ -2,6 +2,7 @@ const port = 5000;
 const express = require("express");
 const { JsonWebTokenError } = require("jsonwebtoken");
 const app = express();
+const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
@@ -13,7 +14,7 @@ const { nextTick, send } = require("process");
 app.use(express.json());
 app.use(cors());
 
-mongoose.connect("mongodb://localhost:27017/E-Commerce");
+mongoose.connect("mongodb+srv://Gargrinku_98:Rinkugarg@89@e-commerce.enlyp.mongodb.net/");
 
 app.get("/",(req,res)=>{
     res.send("Express is Running");
@@ -77,6 +78,7 @@ const Product = mongoose.model("Product",{
     },
 })
 
+
 app.post('/addproduct',async (req,res)=>{
     let products = await Product.find({});
     let id;
@@ -107,7 +109,23 @@ app.post('/addproduct',async (req,res)=>{
     })
 })
 
+const fetchUser = async (req,res,next) => {
+    const token = req.header('auth-token');
+    if (!token) {
+        res.status(401).send({errors:"Please authenticate using valid token"})
+    }
+    else
+    {
+        try {
+            const data = jwt.verify(token,'secret_ecom');
+            req.user = data.user;
+            next();
+        } catch (error) {
+            res.status(401),send({errors:"Please Authenticate using a valid token"})
+        }
+    }
 
+}
 // creating api for remove product
 
 app.post('/removeproduct',async (req,res)=>{
@@ -118,6 +136,11 @@ app.post('/removeproduct',async (req,res)=>{
         name:req.body.name
     })
 })
+app.post("/getcart", fetchUser, async (req, res) => {
+    console.log("GetCart");
+    let userData = await Users.findOne({_id: req.user.id});
+    res.json(userData.cartData);
+});
 
 // creating API for getting all product list
 
@@ -162,6 +185,7 @@ app.post('/signup',async (req,res) => {
     if (check) {
         return res.status(400).json({success:false,errors:"User Already Exist With Same Email Address"})
     }
+    let hashedPassword = await bcrypt.hash(req.body.password, 10);
     let cart = {};
     for (let i = 0; i < 300; i++) {
         cart[i]=0;
@@ -169,7 +193,7 @@ app.post('/signup',async (req,res) => {
     const user = new Users({
         name:req.body.username,
         email:req.body.email,
-        password:req.body.password,
+        password:hashedPassword,
         cartData:cart,
     })
 
@@ -192,7 +216,7 @@ app.post('/signup',async (req,res) => {
 app.post('/login',async (req,res) => {
     let user = await Users.findOne({email:req.body.email});
     if (user) {
-        const passCompare = req.body.password === user.password;
+        const passCompare = await bcrypt.compare(req.body.password, user.password);
         if (passCompare) {
             const data = {
                 user : {
@@ -231,23 +255,7 @@ app.get('/popularinhorses',async (req,res) => {
     res.send(popular_in_horse);
 })
 
-const fetchUser = async (req,res,next) => {
-    const token = req.header('auth-token');
-    if (!token) {
-        res.status(401).send({errors:"Please authenticate using valid token"})
-    }
-    else
-    {
-        try {
-            const data = jwt.verify(token,'secret_ecom');
-            req.user = data.user;
-            next();
-        } catch (error) {
-            res.status(401),send({errors:"Please Authenticate using a valid token"})
-        }
-    }
 
-}
 
 
 
@@ -270,6 +278,7 @@ app.post('/addtocart', fetchUser, async (req, res) => {
         );
 
         res.json({ success: true, message: "Item added to cart" });
+        
     } catch (error) {
         console.error("Error adding item to cart:", error);
         res.status(500).json({ success: false, error: "Internal Server Error" });
